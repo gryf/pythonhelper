@@ -20,17 +20,16 @@ class PythonTag(object):
     METHOD = "method"
     FUNCTION = "function"
 
-    def __init__(self, tag_type, name, full_name, line_number, indent_level):
+    def __init__(self, tag_type, full_name, line_number, indent_level):
         """Initializes instances of Python tags.
 
         :param tag_type: Tag type as string
-        :param name: Short tag name
         :param full_name: Full tag name (in dotted notation)
         :param line_number: line number on which the tag starts
         :param indent_level: indentation level of the tag (number)
         """
         self.tag_type = tag_type
-        self.name = name
+        self.name = full_name.split(".")[-1]
         self.full_name = full_name
         self.line_number = line_number
         self.indent_level = indent_level
@@ -128,6 +127,7 @@ class SimplePythonTagsParser(object):
 
         return parent_tag
 
+    @staticmethod
     def compute_indentation_level(indent_chars):
         """
         Computes the indentation level from the specified string.
@@ -144,8 +144,6 @@ class SimplePythonTagsParser(object):
                 indent_level += 1
 
         return indent_level
-
-    compute_indentation_level = staticmethod(compute_indentation_level)
 
     def get_python_tag(self, tags_stack, line_number, indent_chars, tag_name,
                        tag_type_deciding_method):
@@ -181,8 +179,7 @@ class SimplePythonTagsParser(object):
             # return it
             else:
                 tag = PythonTag(tag_type_deciding_method(parent_tag.tag_type),
-                                tag_name, "%s.%s" % (parent_tag.full_name,
-                                                     tag_name,),
+                                "%s.%s" % (parent_tag.full_name, tag_name,),
                                 line_number, indent_level)
 
                 break
@@ -192,7 +189,7 @@ class SimplePythonTagsParser(object):
 
         # handle a top-indent level tag
         else:
-            tag = PythonTag(tag_type_deciding_method(None), tag_name, tag_name,
+            tag = PythonTag(tag_type_deciding_method(None), tag_name,
                             line_number, indent_level)
 
         # add the tag to the list of tags
