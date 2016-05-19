@@ -45,17 +45,15 @@ class SimplePythonTagsParser(object):
     TABSIZE = 8
     # regexp used to extract indentation and strip comments
     COMMENTS_INDENT_RE = re.compile('([ \t]*)([^\n#]*).*')
-    # regexp used to extract a class name
-    CLASS_RE = re.compile('class[ \t]+([^(:]+).*')
-    # regexp used to extract a method or function name
-    METHOD_RE = re.compile('def[ \t]+([^(]+).*')
+    # regexp used to extract a class or function name
+    TAG_TYPE_RE = re.compile('(def|class)[ \t]+([^(:]+).*')
 
     def __init__(self, source):
         """
         Initializes instances of SimplePythonTagsParser().
 
-        :param source: source for which the tags will be generated. It must
-                       be a generator.
+        :param source: source for which the tags will be generated. It is
+                       simply vim buffer.
         """
         self.source = source
 
@@ -63,49 +61,36 @@ class SimplePythonTagsParser(object):
         """
         Determines all the tags for the buffer.
 
-        :returns: tuple in the format (tag_line_numbers, tags,).
+        :returns: tuple of tags line numbers and tags
         """
         tag_line_numbers = []
         tags = {}
         tags_stack = []
 
-        import itertools
         # go through all the lines in the source and localize all Python tags
         # in it
-        for (line, line_number) in zip(self.source, itertools.count(1)):
+        #  for (line, line_number) in zip(self.source, itertools.count(1)):
+        for line_number, line in enumerate(self.source, start=1):
+            line = line + '\n'
 
             # extract the line's indentation characters and its content
             line_match = self.COMMENTS_INDENT_RE.match(line)
             line_content = line_match.group(2)
 
             # match for the class tag
-            tag_match = self.CLASS_RE.match(line_content)
+            tag_match = self.TAG_TYPE_RE.match(line_content)
 
             # if the class tag has been found, store some information on it
             if tag_match:
                 current_tag = self.get_python_tag(tags_stack, line_number,
                                                   line_match.group(1),
-                                                  tag_match.group(1),
-                                                  self.tag_class_type_deciding_method)
+                                                  tag_match.group(2),
+                                                  tag_match.group(1))
+
                 tag_line_numbers.append(line_number)
                 tags[line_number] = current_tag
 
-            else:
-                # match for the method/function tag
-                tag_match = self.METHOD_RE.match(line_content)
-
-                # if the method/function tag has been found, store some
-                # information on it
-                if tag_match:
-                    current_tag = self.get_python_tag(tags_stack,
-                                                      line_number,
-                                                      line_match.group(1),
-                                                      tag_match.group(1),
-                                                      self.tag_function_type_deciding_method)
-                    tag_line_numbers.append(line_number)
-                    tags[line_number] = current_tag
-
-        return (tag_line_numbers, tags,)
+        return tag_line_numbers, tags
 
     def get_parent_tag(self, tags_stack):
         """
@@ -140,7 +125,7 @@ class SimplePythonTagsParser(object):
         return indent_level
 
     def get_python_tag(self, tags_stack, line_number, indent_chars, tag_name,
-                       tag_type_deciding_method):
+                       obj_type):
         """
         Returns instance of PythonTag based on the specified data.
 
@@ -150,15 +135,21 @@ class SimplePythonTagsParser(object):
         :param indent_chars: characters making up the indentation level of the
                              current tag
         :param tag_name: short name of the current tag
-        :param tag_type_deciding_method: reference to the method that is
-                                         called to determine the type of the
-                                         current tag
+        :param obj_type: one of 'class' or 'def'
         """
         indent_level = self.compute_indentation_level(indent_chars)
         parent_tag = self.get_parent_tag(tags_stack)
 
+        if obj_type == 'class':
+            obj_type = PythonTag.CLASS
+        else:
+            obj_type = PythonTag.FUNCTION
+
         # handle enclosed tag
         while parent_tag:
+            if parent_tag.tag_type == PythonTag.CLASS:
+                obj_type = PythonTag.METHOD
+
             # if the indent level of the parent tag is greater than of the
             # current tag, use parent tag of the parent tag
             if parent_tag.indent_level >= indent_level:
@@ -167,10 +158,9 @@ class SimplePythonTagsParser(object):
             # otherwise we have all information on the current tag and can
             # return it
             else:
-                tag = PythonTag(tag_type_deciding_method(parent_tag.tag_type),
+                tag = PythonTag(obj_type,
                                 "%s.%s" % (parent_tag.full_name, tag_name,),
                                 line_number, indent_level)
-
                 break
 
             # use the parent tag of the parent tag
@@ -178,24 +168,12 @@ class SimplePythonTagsParser(object):
 
         # handle a top-indent level tag
         else:
-            tag = PythonTag(tag_type_deciding_method(None), tag_name,
-                            line_number, indent_level)
+            tag = PythonTag(obj_type, tag_name, line_number, indent_level)
 
         # add the tag to the list of tags
         tags_stack.append(tag)
 
         return tag
-
-    def tag_class_type_deciding_method(self, parent_tag_type):
-        """
-        Returns tag type of the current tag based on its previous tag (super
-        tag) for classes.
-
-        Parameters
-
-            parent_tag_type -- type of the enclosing/parent tag
-        """
-        return PythonTag.CLASS
 
     def tag_function_type_deciding_method(self, parent_tag_type):
         """
@@ -387,29 +365,20 @@ def get_nearest_line_index(row, tag_line_numbers):
 
 def get_tags(buffer_number, changed_tick):
     """
-    Reads the tags for the buffer specified by the number. Returns a tuple
-    of the format (taglinenumber[buffer], tags[buffer],).
+    Reads the tags for the buffer specified by the number..
 
-    Parameters
-
-        buffer_number -- number of the current buffer
-
-        changed_tick -- always-increasing number used to indicate that the
-            buffer has been modified since the last time
+    :param buffer_number: Number of the current buffer
+    :param changed_tick: Always-increasing number used to indicate that the
+                         buffer has been modified since the last time
+    :returns:  Tuple of the format (taglinenumber[buffer], tags[buffer])
     """
-
-    def vim_buffer_iterator(vim_buffer):
-        """Iterator over vim buffer"""
-        for line in vim_buffer:
-            yield line + "\n"
-
     # return immediately if there's no need to update the tags
     if PythonHelper.BUFFER_TICKS.get(buffer_number, None) == changed_tick:
         return (PythonHelper.TAG_LINE_NUMBERS[buffer_number],
                 PythonHelper.TAGS[buffer_number])
 
     # get the tags
-    simple_tags_parser = SimplePythonTagsParser(vim_buffer_iterator(vim.current.buffer))
+    simple_tags_parser = SimplePythonTagsParser(vim.current.buffer)
     tag_line_numbers, tags = simple_tags_parser.get_tags()
 
     # update the global variables
