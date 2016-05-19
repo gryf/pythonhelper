@@ -67,7 +67,7 @@ function! PHCursorHold()
 
     " call Python function findTag() with the current buffer number and change
     " status indicator
-    execute g:pythonhelper_python . ' find_tag(' . expand("<abuf>") .
+    execute g:pythonhelper_python . ' PythonHelper.find_tag(' . expand("<abuf>") .
                 \ ', ' . b:changedtick . ')'
 endfunction
 
@@ -80,7 +80,7 @@ function! PHBufferDelete()
 
     " call Python function deleteTags() with the current buffer number and
     " change status indicator
-    execute g:pythonhelper_python . ' delete_tags(' . expand("<abuf>") . ')'
+    execute g:pythonhelper_python . ' PythonHelper.delete_tags(' . expand("<abuf>") . ')'
 endfunction
 
 

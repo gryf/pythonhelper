@@ -8,12 +8,6 @@ import time
 import vim
 
 
-# global dictionaries of tags and their line numbers, keys are buffer numbers
-TAGS = {}
-TAGLINENUMBERS = {}
-BUFFERTICKS = {}
-
-
 class PythonTag(object):
     """A simple storage class representing a python tag."""
     CLASS = "class"
@@ -150,20 +144,15 @@ class SimplePythonTagsParser(object):
         """
         Returns instance of PythonTag based on the specified data.
 
-        Parameters
-
-            tags_stack -- list (stack) of tags currently active. Note: Modified
-                in this method!
-
-            line_number -- current line number
-
-            indent_chars -- characters making up the indentation level of the
-                current tag
-
-            tag_name -- short name of the current tag
-
-            tag_type_deciding_method -- reference to the method that is called to
-                determine the type of the current tag
+        :param tags_stack: list (stack) of tags currently active.
+                           Note: Modified in this method!
+        :param line_number: current line number
+        :param indent_chars: characters making up the indentation level of the
+                             current tag
+        :param tag_name: short name of the current tag
+        :param tag_type_deciding_method: reference to the method that is
+                                         called to determine the type of the
+                                         current tag
         """
         indent_level = self.compute_indentation_level(indent_chars)
         parent_tag = self.get_parent_tag(tags_stack)
@@ -223,9 +212,148 @@ class SimplePythonTagsParser(object):
             return PythonTag.FUNCTION
 
 
-def vim_buffer_iterator(vim_buffer):
-    for line in vim_buffer:
-        yield line + "\n"
+class PythonHelper(object):
+    TAG_LINE_NUMBERS = {}
+    TAGS = {}
+    BUFFER_TICKS = {}
+
+    @classmethod
+    def find_tag(cls, buffer_number, changed_tick):
+        """
+        Tries to find the best tag for the current cursor position.
+
+        Parameters
+
+            buffer_number -- number of the current buffer
+
+            changed_tick -- always-increasing number used to indicate that the
+                buffer has been modified since the last time
+        """
+        try:
+            # get the tag data for the current buffer
+            tag_line_numbers, tags = get_tags(buffer_number, changed_tick)
+
+            # link to Vim's internal data
+            current_buffer = vim.current.buffer
+            current_window = vim.current.window
+            row, col = current_window.cursor
+
+            # get the index of the nearest line
+            nearest_line_index = get_nearest_line_index(row, tag_line_numbers)
+
+            # if a line has been found, find out if the tag is correct {{{
+            # E.g. the cursor might be below the last tag, but in code that has
+            # nothing to do with the tag, which we know because the line is
+            # indented differently. In such a case no applicable tag has been
+            # found.
+            while nearest_line_index > -1:
+                # get the line number of the nearest tag
+                nearest_line_number = tag_line_numbers[nearest_line_index]
+
+                # walk through all the lines in the range (nearestTagLine,
+                # cursorRow)
+                for line_number in xrange(nearest_line_number + 1, row):
+                    # get the current line
+                    line = current_buffer[line_number]
+
+                    # count the indentation of the line, if it's lower than the
+                    # tag's, the tag is invalid
+                    if len(line):
+                        # initialize local auxiliary variables
+                        line_start = 0
+                        i = 0
+
+                        # compute the indentation of the line
+                        while (i < len(line)) and (line[i].isspace()):
+                            # move the start of the line code
+                            if line[i] == '\t':
+                                line_start += SimplePythonTagsParser.TABSIZE
+                            else:
+                                line_start += 1
+
+                            # go to the next character on the line
+                            i += 1
+
+                        # if the line contains only spaces, skip it
+                        if i == len(line):
+                            continue
+
+                        # if the next character is a '#' (python comment), skip
+                        # to the next line
+                        if line[i] == '#':
+                            continue
+
+                        # if the line's indentation starts before or at the
+                        # nearest tag's, the tag is invalid
+                        if line_start <= tags[nearest_line_number].indent_level:
+                            nearest_line_index -= 1
+                            break
+
+                # the tag is correct, so use it
+                else:
+                    break
+
+            # no applicable tag has been found
+            else:
+                nearest_line_number = -1
+
+            # describe the cursor position (what tag the cursor is on)
+            # reset the description
+            tag_description = ""
+            tag_description_tag = ""
+            tag_description_type = ""
+
+            # if an applicable tag has been found, set the description accordingly
+            if nearest_line_number > -1:
+                tag_info = tags[nearest_line_number]
+                tag_description_tag = tag_info.full_name
+                tag_description_type = tag_info.tag_type
+                tag_description = "%s (%s)" % (tag_description_tag,
+                                               tag_description_type)
+
+            # update the variable for the status line so it get updated with the
+            # new description
+            vim.command("let w:PHStatusLine=\"%s\"" % (tag_description,))
+            vim.command("let w:PHStatusLineTag=\"%s\"" % (tag_description_tag,))
+            vim.command("let w:PHStatusLineType=\"%s\"" % (tag_description_type,))
+
+        # handle possible exceptions
+        except Exception:
+            # FIXME: wrap try/except blocks around single sources of exceptions
+            # ONLY. Break this try/except block into as many small ones as you
+            # need, and only catch classes of exceptions that you have encountered.
+            # Catching "Exception" is very, very bad style!
+            # To the author: why is this clause here? There's no git log for why you
+            # have added it. Can you please put in a comment of a specific situation
+            # where you have encountered exceptions?
+            # bury into the traceback
+            ec, ei, tb = sys.exc_info()
+            while tb is not None:
+                if tb.tb_next is None:
+                    break
+                tb = tb.tb_next
+
+            # spit out the error
+            print "ERROR: %s %s %s:%u" % (ec.__name__, ei,
+                                          tb.tb_frame.f_code.co_filename,
+                                          tb.tb_lineno)
+            time.sleep(0.5)
+
+    @classmethod
+    def delete_tags(cls, buffer_number):
+        """
+        Removes tag data for the specified buffer number.
+
+        Parameters
+
+            buffer_number -- number of the buffer
+        """
+        for item in (PythonHelper.TAGS, PythonHelper.TAG_LINE_NUMBERS,
+                     PythonHelper.BUFFER_TICKS):
+            try:
+                del item[buffer_number]
+            except KeyError:
+                pass
 
 
 def get_nearest_line_index(row, tag_line_numbers):
@@ -269,159 +397,24 @@ def get_tags(buffer_number, changed_tick):
         changed_tick -- always-increasing number used to indicate that the
             buffer has been modified since the last time
     """
-    global TAGLINENUMBERS, TAGS, BUFFERTICKS
+
+    def vim_buffer_iterator(vim_buffer):
+        """Iterator over vim buffer"""
+        for line in vim_buffer:
+            yield line + "\n"
 
     # return immediately if there's no need to update the tags
-    if (BUFFERTICKS.get(buffer_number, None) == changed_tick):
-        return (TAGLINENUMBERS[buffer_number], TAGS[buffer_number])
+    if PythonHelper.BUFFER_TICKS.get(buffer_number, None) == changed_tick:
+        return (PythonHelper.TAG_LINE_NUMBERS[buffer_number],
+                PythonHelper.TAGS[buffer_number])
 
     # get the tags
     simple_tags_parser = SimplePythonTagsParser(vim_buffer_iterator(vim.current.buffer))
     tag_line_numbers, tags = simple_tags_parser.get_tags()
 
     # update the global variables
-    TAGS[buffer_number] = tags
-    TAGLINENUMBERS[buffer_number] = tag_line_numbers
-    BUFFERTICKS[buffer_number] = changed_tick
+    PythonHelper.TAGS[buffer_number] = tags
+    PythonHelper.TAG_LINE_NUMBERS[buffer_number] = tag_line_numbers
+    PythonHelper.BUFFER_TICKS[buffer_number] = changed_tick
 
     return (tag_line_numbers, tags)
-
-
-def find_tag(buffer_number, changed_tick):
-    """
-    Tries to find the best tag for the current cursor position.
-
-    Parameters
-
-        buffer_number -- number of the current buffer
-
-        changed_tick -- always-increasing number used to indicate that the
-            buffer has been modified since the last time
-    """
-    try:
-        # get the tag data for the current buffer
-        tag_line_numbers, tags = get_tags(buffer_number, changed_tick)
-
-        # link to Vim's internal data
-        current_buffer = vim.current.buffer
-        current_window = vim.current.window
-        row, col = current_window.cursor
-
-        # get the index of the nearest line
-        nearest_line_index = get_nearest_line_index(row, tag_line_numbers)
-
-        # if a line has been found, find out if the tag is correct {{{
-        # E.g. the cursor might be below the last tag, but in code that has
-        # nothing to do with the tag, which we know because the line is
-        # indented differently. In such a case no applicable tag has been
-        # found.
-        while nearest_line_index > -1:
-            # get the line number of the nearest tag
-            nearest_line_number = tag_line_numbers[nearest_line_index]
-
-            # walk through all the lines in the range (nearestTagLine,
-            # cursorRow)
-            for line_number in xrange(nearest_line_number + 1, row):
-                # get the current line
-                line = current_buffer[line_number]
-
-                # count the indentation of the line, if it's lower than the
-                # tag's, the tag is invalid
-                if len(line):
-                    # initialize local auxiliary variables
-                    line_start = 0
-                    i = 0
-
-                    # compute the indentation of the line
-                    while (i < len(line)) and (line[i].isspace()):
-                        # move the start of the line code
-                        if line[i] == '\t':
-                            line_start += SimplePythonTagsParser.TABSIZE
-                        else:
-                            line_start += 1
-
-                        # go to the next character on the line
-                        i += 1
-
-                    # if the line contains only spaces, skip it
-                    if i == len(line):
-                        continue
-
-                    # if the next character is a '#' (python comment), skip
-                    # to the next line
-                    if line[i] == '#':
-                        continue
-
-                    # if the line's indentation starts before or at the
-                    # nearest tag's, the tag is invalid
-                    if line_start <= tags[nearest_line_number].indent_level:
-                        nearest_line_index -= 1
-                        break
-
-            # the tag is correct, so use it
-            else:
-                break
-
-        # no applicable tag has been found
-        else:
-            nearest_line_number = -1
-
-        # describe the cursor position (what tag the cursor is on)
-        # reset the description
-        tag_description = ""
-        tag_description_tag = ""
-        tag_description_type = ""
-
-        # if an applicable tag has been found, set the description accordingly
-        if nearest_line_number > -1:
-            tag_info = tags[nearest_line_number]
-            tag_description_tag = tag_info.full_name
-            tag_description_type = tag_info.tag_type
-            tag_description = "%s (%s)" % (tag_description_tag,
-                                           tag_description_type)
-
-        # update the variable for the status line so it get updated with the
-        # new description
-        vim.command("let w:PHStatusLine=\"%s\"" % (tag_description,))
-        vim.command("let w:PHStatusLineTag=\"%s\"" % (tag_description_tag,))
-        vim.command("let w:PHStatusLineType=\"%s\"" % (tag_description_type,))
-
-    # handle possible exceptions
-    except Exception:
-        # FIXME: wrap try/except blocks around single sources of exceptions
-        # ONLY. Break this try/except block into as many small ones as you
-        # need, and only catch classes of exceptions that you have encountered.
-        # Catching "Exception" is very, very bad style!
-        # To the author: why is this clause here? There's no git log for why you
-        # have added it. Can you please put in a comment of a specific situation
-        # where you have encountered exceptions?
-        # bury into the traceback
-        ec, ei, tb = sys.exc_info()
-        while tb != None:
-            if tb.tb_next == None:
-                break
-            tb = tb.tb_next
-
-        # spit out the error
-        print "ERROR: %s %s %s:%u" % (ec.__name__, ei,
-                                      tb.tb_frame.f_code.co_filename,
-                                      tb.tb_lineno)
-        time.sleep(0.5)
-
-
-def delete_tags(buffer_number):
-    """
-    Removes tag data for the specified buffer number.
-
-    Parameters
-
-        buffer_number -- number of the buffer
-    """
-    global TAGS, TAGLINENUMBERS, BUFFERTICKS
-
-    # try to delete the tags for the buffer
-    for o in (TAGS, TAGLINENUMBERS, BUFFERTICKS):
-        try:
-            del o[buffer_number]
-        except KeyError:
-            pass
