@@ -111,7 +111,8 @@ class SimplePythonTagsParser(object):
         """
         Computes the indentation level from the specified string.
 
-        indent_chars -- white space before any other character on line
+        :param indent_chars: White space before any other character on line
+        :returns: indent level as an int
         """
         indent_level = 0
 
@@ -136,6 +137,7 @@ class SimplePythonTagsParser(object):
                              current tag
         :param tag_name: short name of the current tag
         :param obj_type: one of 'class' or 'def'
+        :returns: PythonTag object
         """
         indent_level = self.compute_indentation_level(indent_chars)
         parent_tag = self.get_parent_tag(tags_stack)
@@ -207,115 +209,93 @@ class PythonHelper(object):
             changed_tick -- always-increasing number used to indicate that the
                 buffer has been modified since the last time
         """
-        try:
-            # get the tag data for the current buffer
-            tag_line_numbers, tags = get_tags(buffer_number, changed_tick)
+        # get the tag data for the current buffer
+        tag_line_numbers, tags = get_tags(buffer_number, changed_tick)
 
-            # link to Vim's internal data
-            current_buffer = vim.current.buffer
-            current_window = vim.current.window
-            row, col = current_window.cursor
+        # link to Vim's internal data
+        current_buffer = vim.current.buffer
+        current_window = vim.current.window
+        row = current_window.cursor[0]
 
-            # get the index of the nearest line
-            nearest_line_index = get_nearest_line_index(row, tag_line_numbers)
+        # get the index of the nearest line
+        nearest_line_index = get_nearest_line_index(row, tag_line_numbers)
 
-            # if a line has been found, find out if the tag is correct {{{
-            # E.g. the cursor might be below the last tag, but in code that has
-            # nothing to do with the tag, which we know because the line is
-            # indented differently. In such a case no applicable tag has been
-            # found.
-            while nearest_line_index > -1:
-                # get the line number of the nearest tag
-                nearest_line_number = tag_line_numbers[nearest_line_index]
+        # if a line has been found, find out if the tag is correct {{{
+        # E.g. the cursor might be below the last tag, but in code that has
+        # nothing to do with the tag, which we know because the line is
+        # indented differently. In such a case no applicable tag has been
+        # found.
+        while nearest_line_index > -1:
+            # get the line number of the nearest tag
+            nearest_line_number = tag_line_numbers[nearest_line_index]
 
-                # walk through all the lines in the range (nearestTagLine,
-                # cursorRow)
-                for line_number in xrange(nearest_line_number + 1, row):
-                    # get the current line
-                    line = current_buffer[line_number]
+            # walk through all the lines in the range (nearestTagLine,
+            # cursorRow)
+            for line_number in xrange(nearest_line_number + 1, row):
+                # get the current line
+                line = current_buffer[line_number]
 
-                    # count the indentation of the line, if it's lower than the
-                    # tag's, the tag is invalid
-                    if len(line):
-                        # initialize local auxiliary variables
-                        line_start = 0
-                        i = 0
+                # count the indentation of the line, if it's lower than the
+                # tag's, the tag is invalid
+                if len(line):
+                    # initialize local auxiliary variables
+                    line_start = 0
+                    i = 0
 
-                        # compute the indentation of the line
-                        while (i < len(line)) and (line[i].isspace()):
-                            # move the start of the line code
-                            if line[i] == '\t':
-                                line_start += SimplePythonTagsParser.TABSIZE
-                            else:
-                                line_start += 1
+                    # compute the indentation of the line
+                    while (i < len(line)) and (line[i].isspace()):
+                        # move the start of the line code
+                        if line[i] == '\t':
+                            line_start += SimplePythonTagsParser.TABSIZE
+                        else:
+                            line_start += 1
 
-                            # go to the next character on the line
-                            i += 1
+                        # go to the next character on the line
+                        i += 1
 
-                        # if the line contains only spaces, skip it
-                        if i == len(line):
-                            continue
+                    # if the line contains only spaces, skip it
+                    if i == len(line):
+                        continue
 
-                        # if the next character is a '#' (python comment), skip
-                        # to the next line
-                        if line[i] == '#':
-                            continue
+                    # if the next character is a '#' (python comment), skip
+                    # to the next line
+                    if line[i] == '#':
+                        continue
 
-                        # if the line's indentation starts before or at the
-                        # nearest tag's, the tag is invalid
-                        if line_start <= tags[nearest_line_number].indent_level:
-                            nearest_line_index -= 1
-                            break
+                    # if the line's indentation starts before or at the
+                    # nearest tag's, the tag is invalid
+                    if line_start <= tags[nearest_line_number].indent_level:
+                        nearest_line_index -= 1
+                        break
 
-                # the tag is correct, so use it
-                else:
-                    break
-
-            # no applicable tag has been found
+            # the tag is correct, so use it
             else:
-                nearest_line_number = -1
+                break
 
-            # describe the cursor position (what tag the cursor is on)
-            # reset the description
-            tag_description = ""
-            tag_description_tag = ""
-            tag_description_type = ""
+        # no applicable tag has been found
+        else:
+            nearest_line_number = -1
 
-            # if an applicable tag has been found, set the description accordingly
-            if nearest_line_number > -1:
-                tag_info = tags[nearest_line_number]
-                tag_description_tag = tag_info.full_name
-                tag_description_type = tag_info.tag_type
-                tag_description = "%s (%s)" % (tag_description_tag,
-                                               tag_description_type)
+        # describe the cursor position (what tag the cursor is on)
+        # reset the description
+        tag_description = ""
+        tag_description_tag = ""
+        tag_description_type = ""
 
-            # update the variable for the status line so it get updated with the
-            # new description
-            vim.command("let w:PHStatusLine=\"%s\"" % (tag_description,))
-            vim.command("let w:PHStatusLineTag=\"%s\"" % (tag_description_tag,))
-            vim.command("let w:PHStatusLineType=\"%s\"" % (tag_description_type,))
+        # if an applicable tag has been found, set the description
+        # accordingly
+        if nearest_line_number > -1:
+            tag_info = tags[nearest_line_number]
+            tag_description_tag = tag_info.full_name
+            tag_description_type = tag_info.tag_type
+            tag_description = "%s (%s)" % (tag_description_tag,
+                                           tag_description_type)
 
-        # handle possible exceptions
-        except Exception:
-            # FIXME: wrap try/except blocks around single sources of exceptions
-            # ONLY. Break this try/except block into as many small ones as you
-            # need, and only catch classes of exceptions that you have encountered.
-            # Catching "Exception" is very, very bad style!
-            # To the author: why is this clause here? There's no git log for why you
-            # have added it. Can you please put in a comment of a specific situation
-            # where you have encountered exceptions?
-            # bury into the traceback
-            ec, ei, tb = sys.exc_info()
-            while tb is not None:
-                if tb.tb_next is None:
-                    break
-                tb = tb.tb_next
-
-            # spit out the error
-            print "ERROR: %s %s %s:%u" % (ec.__name__, ei,
-                                          tb.tb_frame.f_code.co_filename,
-                                          tb.tb_lineno)
-            time.sleep(0.5)
+        # update the variable for the status line so it get updated with
+        # the new description
+        vim.command("let w:PHStatusLine=\"%s\"" % tag_description)
+        vim.command("let w:PHStatusLineTag=\"%s\"" % tag_description_tag)
+        vim.command("let w:PHStatusLineType=\"%s\"" % tag_description_type)
 
     @classmethod
     def delete_tags(cls, buffer_number):
