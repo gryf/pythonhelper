@@ -2,7 +2,7 @@
 " Author: Michal Vitecek <fuf-at-mageo-dot-cz>
 " Author: Roman Dobosz <gryf@vimja.com>
 " Version: 0.84
-" Last Modified: 2016-05-18
+" Last Modified: 2016-05-21
 "
 " Overview
 " --------
