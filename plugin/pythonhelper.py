@@ -29,9 +29,6 @@ RE_INDENT = re.compile(r'([ \t]*).*')
 
 class PythonTag(object):
     """A simple storage class representing a python tag."""
-    CLASS = "class"
-    METHOD = "method"
-    FUNCTION = "function"
 
     def __init__(self, tag_type='', full_name='', line_number=0,
                  indent_level=0):
@@ -70,27 +67,39 @@ class EvenSimplerPythonTagsParser(object):
 
             tag_match = RE_TAG_TYPE.match(line)
 
-            if tag_match:
-                indent_level = self._get_indent_level(line)
+            if not tag_match:
+                continue
 
-                for _ in range(len(tags_stack)):
-                    if tags_stack and \
-                       tags_stack[-1].indent_level >= indent_level:
-                        tags_stack.pop()
+            indent_level = self._get_indent_level(line)
 
-                    if not tags_stack:
-                        break
+            for _ in range(len(tags_stack)):
+                if tags_stack and tags_stack[-1].indent_level >= indent_level:
+                    tags_stack.pop()
 
-                tag = PythonTag(tag_match.group(1),
-                                self._get_full_name(tags_stack,
-                                                    tag_match.group(2)),
-                                line_no,
-                                indent_level)
+                if not tags_stack:
+                    break
 
-                tags[line_no] = tag
-                tags_stack.append(tag)
+            tag = PythonTag(tag_match.group(1),
+                            self._get_full_name(tags_stack,
+                                                tag_match.group(2)),
+                            line_no,
+                            indent_level)
+            tag.tag_type = self._get_tag_type(tag, tags_stack)
+
+            tags[line_no] = tag
+            tags_stack.append(tag)
 
         return tags
+
+    def _get_tag_type(self, tag, tags_stack):
+        """Return proper type of the tag depending on context"""
+        if tag.tag_type == 'class':
+            return 'class'
+
+        if tags_stack and tags_stack[-1].tag_type == 'class':
+            return 'method'
+
+        return 'function'
 
     def _get_full_name(self, tags_stack, name):
         """Return full logical name dot separated starting from upper entity"""
@@ -119,6 +128,13 @@ class PythonHelper(object):
             changed_tick -- always-increasing number used to indicate that the
                 buffer has been modified since the last time
         """
+        tag = PythonHelper._get_tag(buffer_number, changed_tick)
+        update_vim_vars(tag)
+
+    @classmethod
+    def _get_tag(cls, buffer_number, changed_tick):
+        """Return the nearset tag object or None"""
+
         if PythonHelper.TAGS.get(buffer_number) and \
            PythonHelper.TAGS[buffer_number]['changed_tick'] == changed_tick:
             tags = PythonHelper.TAGS[buffer_number]['tags']
@@ -133,24 +149,46 @@ class PythonHelper(object):
         # one, so that it will not confuse us while operating vim interface by
         # python, where everything starts from 0.
         line_number = vim.current.window.cursor[0] - 1
+
         while True:
             line = vim.current.buffer[line_number]
+            line_indent = len(RE_INDENT.match(line).group(1))
             if line.strip():
-                line_indent = len(RE_INDENT.match(line).group(1))
                 break
             # line contains nothing but white characters, looking up to grab
             # some more context
             line_number -= 1
 
         tag = tags.get(line_number)
-        if not tag:
-            key = None
-            for key in reversed(tags.keys()):
-                if line_number >= key and line_indent > tags[key].indent_level:
-                    tag = tags.get(key)
-                    break
 
-        update_vim_vars(tag)
+        # if we have something at the beginning of the line, just return it;
+        # it doesn't matter if it is the tag found there or not
+        if line_indent == 0 or tag:
+            return tag
+
+        # get nearest tag
+        for line_no in range(line_number - 1, 0, -1):
+            tag = tags.get(line_no)
+            line = vim.current.buffer[line_no]
+            upper_line_indent = len(RE_INDENT.match(line).group(1))
+
+            if tag and upper_line_indent < line_indent:
+                return tag
+
+            if not line.strip():
+                continue
+
+            if upper_line_indent == 0:
+                return None
+
+            if upper_line_indent >= line_indent:
+                continue
+
+            if tag and tag.indent_level >= line_indent:
+                tag = None
+                continue
+
+        return tag
 
     @classmethod
     def delete_tags(cls, buffer_number):
