@@ -7,16 +7,12 @@ import sys
 
 class Command(object):
     def __call__(self, args):
-        print args
+        print(args)
+
 
 class Window(object):
     def __init__(self):
-        self.cursor = (5, 13)  # class
-        # self.cursor = (8, 13)  # class
-        #  self.cursor = (12, 13)  # inner function
-        #  self.cursor = (22, 13)  # method
-        #  self.cursor = (30, 13)  # function
-        #  self.cursor = (36, 13)  # function
+        self.cursor = (1, 1)
 
 
 class Current(object):
@@ -32,6 +28,7 @@ class MockVim(object):
 
 
 sys.modules['vim'] = vim = MockVim
+
 
 import pythonhelper
 
