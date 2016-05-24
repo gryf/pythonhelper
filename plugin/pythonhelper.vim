@@ -1,8 +1,8 @@
 " File: pythonhelper.vim
 " Author: Michal Vitecek <fuf-at-mageo-dot-cz>
 " Author: Roman Dobosz <gryf@vimja.com>
-" Version: 0.84
-" Last Modified: 2016-05-21
+" Version: 0.85
+" Last Modified: 2016-05-24
 "
 " Overview
 " --------
@@ -33,15 +33,16 @@
 
 " VIM functions {{{
 let g:pythonhelper_python = 'python'
+let s:plugin_path = expand('<sfile>:p:h', 1)
+
 function! s:PHLoader()
-    let l:plugin_path = escape(expand('<sfile>:p:h'), '\')
 
     if !exists('g:pythonhelper_py_loaded')
         if has('python')
-            exe 'pyfile ' . escape(l:plugin_path, ' ') . '/pythonhelper.py'
+            exe 'pyfile ' . s:plugin_path . '/pythonhelper.py'
         elseif has('python3')
             let g:pythonhelper_python = 'python3'
-            exe 'py3file ' . escape(l:plugin_path, ' ') . '/pythonhelper.py'
+            exe 'py3file ' . s:plugin_path . '/pythonhelper.py'
         else
             echohl WarningMsg|echomsg
                         \ "PythonHelper unavailable: "
