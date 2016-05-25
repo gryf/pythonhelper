@@ -197,7 +197,11 @@ class PythonHelper(object):
     @classmethod
     def delete_tags(cls, buffer_number):
         """Removes tag data for the specified buffer number."""
-        del PythonHelper.TAGS[buffer_number]
+        try:
+            del PythonHelper.TAGS[buffer_number]
+        except KeyError:
+            # If we don't have tags for specified buffer, just pass
+            pass
 
 
 def update_vim_vars(tag):
