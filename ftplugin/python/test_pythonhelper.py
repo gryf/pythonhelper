@@ -17,14 +17,16 @@ class Window(object):
 
 class Current(object):
     def __init__(self):
-        with open('test_py_example.py') as fobj:
-            self.buffer = fobj.read().split('\n')
+        self.buffer = []
         self.window = Window()
 
 
 class MockVim(object):
     current = Current()
     command = Command()
+
+with open('test_py_example.py') as fobj:
+    BUFFER = fobj.read().split('\n')
 
 
 sys.modules['vim'] = vim = MockVim
@@ -33,7 +35,21 @@ sys.modules['vim'] = vim = MockVim
 import pythonhelper
 
 
+class TestTagsHelperWithEmptyBuffer(unittest.TestCase):
+
+    def setUp(self):
+        vim.current.buffer = []
+
+    def test_get_tag(self):
+        vim.current.window.cursor = (1, 1)
+        tag = pythonhelper.PythonHelper._get_tag(1, 2)
+        self.assertIsNone(tag)
+
+
 class TestTagsHelper(unittest.TestCase):
+
+    def setUp(self):
+        vim.current.buffer = BUFFER
 
     def test_import(self):
         vim.current.window.cursor = (1, 1)

@@ -151,7 +151,11 @@ class PythonHelper(object):
         line_number = vim.current.window.cursor[0] - 1
 
         while True:
-            line = vim.current.buffer[line_number]
+            try:
+                line = vim.current.buffer[line_number]
+            except IndexError:
+                return None
+
             line_indent = len(RE_INDENT.match(line).group(1))
             if line.strip():
                 break
