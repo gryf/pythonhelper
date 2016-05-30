@@ -1,35 +1,9 @@
 " File: pythonhelper.vim
 " Author: Michal Vitecek <fuf-at-mageo-dot-cz>
 " Author: Roman Dobosz <gryf@vimja.com>
-" Version: 0.85
+" Version: 1.0
+" License: 3-clause BSD license
 " Last Modified: 2016-05-24
-"
-" Overview
-" --------
-" This Vim script helps you find yourself in larger Python source files. It
-" displays the current Python class, method or function the cursor is placed
-" on in the status line. It's smarter than Yegappan Lakshmanan's taglist.vim
-" because it takes indentation and comments into account in order to determine
-" what identifier the cursor is placed on.
-"
-" Requirements
-" ------------
-" This script needs only VIM compiled with the Python interpreter. It doesn't
-" rely on the exuberant ctags utilities. You can determine whether your VIM
-" has Python support by issuing command :ver and looking for +python or
-" +python3 in the list of features.
-"
-" Installation
-" ------------
-" 1. Make sure your Vim has the Python feature enabled (+python). If not, you
-"    will need to recompile it with the --with-pythoninterp option passed to
-"    the configure script
-" 2. Copy the pythonhelper.vim script to the $HOME/.vim/plugin directory, or
-"    install it in some other way (vim-addon-manager, pathogen, ...)
-" 3. Add '%{TagInStatusLine()}' to the statusline in your vimrc. You can also
-"    use %{TagInStatusLineTag()} or %{TagInStatusLineType()} for just the tag
-"    name or tag type respectively.
-" 4. Run Vim and open any Python file.
 
 " VIM functions {{{
 let g:pythonhelper_python = 'python'

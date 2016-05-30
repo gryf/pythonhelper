@@ -2,20 +2,12 @@
 Simple analyzer for python source files. Collect and give info about file
 structure: classes, its methods and functions.
 
-version: 0.2
-date: 2016-05-21
+Note, it'll probably not be behaving well with mixed spaces and tabs
+indentation.
+
+version: 1.0
+date: 2016-05-30
 author: Roman Dobosz <gryf@vimja.com>
-
-TODO: - fix the corner case with applying a tag, where it shouldn't do. like:
-
-1    def foo():
-2        pass
-3
-4    if True == False:
-5        foo()
-
-where line 5 is reporting as a function foo() body, which is not true.
-
 """
 from collections import OrderedDict
 import re
@@ -45,21 +37,26 @@ class PythonTag(object):
         self.line_number = line_number
         self.indent_level = indent_level
 
-    def __str__(self):
-        """Returns a string representation of the tag."""
-        return "%0.2d [%d] %s %s" % (self.line_number,
-                                     self.indent_level,
-                                     self.tag_type,
-                                     self.full_name)
-
-    __repr__ = __str__
+    def __repr__(self):
+        """Representation for the PythonTag objects"""
+        return ("<PythonTag object at %s: %0.2d [%d] %s %s>" %
+                (hex(id(self)),
+                 self.line_number,
+                 self.indent_level,
+                 self.tag_type,
+                 self.full_name))
 
 
 class EvenSimplerPythonTagsParser(object):
     """Simplified version for Python source code tag parser."""
 
     def get_tags(self):
-        """Return OrderedDict with all tags for current buffer"""
+        """
+        Find tag in current buffer. Store them in OrderedDict and return.
+
+        :returns: OrderedDict with tags for current buffer or empty
+                  OrderedDict in case of no tags found.
+        """
         tags_stack = []
         tags = OrderedDict()
 
@@ -92,7 +89,14 @@ class EvenSimplerPythonTagsParser(object):
         return tags
 
     def _get_tag_type(self, tag, tags_stack):
-        """Return proper type of the tag depending on context"""
+        """
+        Calculate name for provided tag.
+
+        :param tag: PythonTag object
+        :param tags_stack: list of PythonTag objects ordered from root to leaf
+
+        :returns: 'class', 'method' or 'function' as a tag type
+        """
         if tag.tag_type == 'class':
             return 'class'
 
@@ -102,14 +106,32 @@ class EvenSimplerPythonTagsParser(object):
         return 'function'
 
     def _get_full_name(self, tags_stack, name):
-        """Return full logical name dot separated starting from upper entity"""
+        """
+        Return full logical name dot separated starting from upper entity
+
+        :param tags_stack: list of PythonTag objects ordered from root to leaf
+        :param name: class, method or function name
+
+        :returns: full name starting from root, separated by dot, like:
+                  function_name
+                  ClassName
+                  ClassName.method_name
+                  ClassName.method_name.inner_function_name
+        """
         if tags_stack:
             return tags_stack[-1].full_name + "." + name
 
         return name
 
     def _get_indent_level(self, line):
-        """Return indentation level as a simple count of whitespaces"""
+        """
+        Calculate and get the indentation level for provided line
+
+        :param line: a string, against which indentation should be calculated
+
+        :returns: counted number of whitespaces
+
+        """
         return len(RE_INDENT.match(line).group(1))
 
 
@@ -121,19 +143,31 @@ class PythonHelper(object):
         """
         Tries to find the best tag for the current cursor position.
 
-        Parameters
-
-            buffer_number -- number of the current buffer
-
-            changed_tick -- always-increasing number used to indicate that the
-                buffer has been modified since the last time
+        :param buffer_number: buffer number in vim
+        :param changed_tick: always-increasing number used to indicate that
+                             the buffer has been modified since the last time
         """
         tag = PythonHelper._get_tag(buffer_number, changed_tick)
-        update_vim_vars(tag)
+
+        s_line = '%s (%s)' % (tag.full_name, tag.tag_type) if tag else ''
+        s_line_tag = tag.full_name if tag else ''
+        s_line_type = tag.tag_type if tag else ''
+
+        vim.command('let w:PHStatusLine="%s"' % s_line)
+        vim.command('let w:PHStatusLineTag="%s"' % s_line_tag)
+        vim.command('let w:PHStatusLineType="%s"' % s_line_type)
 
     @classmethod
     def _get_tag(cls, buffer_number, changed_tick):
-        """Return the nearset tag object or None"""
+        """
+        Get the nearest tag object or None.
+
+        :param buffer_number: buffer number in vim
+        :param changed_tick: always-increasing number used to indicate that
+                             the buffer has been modified since the last time
+
+        :returns: PythonTag tag object or None
+        """
 
         if PythonHelper.TAGS.get(buffer_number) and \
            PythonHelper.TAGS[buffer_number]['changed_tick'] == changed_tick:
@@ -196,23 +230,12 @@ class PythonHelper(object):
 
     @classmethod
     def delete_tags(cls, buffer_number):
-        """Removes tag data for the specified buffer number."""
+        """Removes tag data for the specified buffer number.
+
+        :param buffer_number: buffer number in vim
+        """
         try:
             del PythonHelper.TAGS[buffer_number]
         except KeyError:
             # If we don't have tags for specified buffer, just pass
             pass
-
-
-def update_vim_vars(tag):
-    """Update Vim variable usable with vimscript side of the plugin"""
-
-    if not tag:
-        vim.command('let w:PHStatusLine=""')
-        vim.command('let w:PHStatusLineTag=""')
-        vim.command('let w:PHStatusLineType=""')
-    else:
-        vim.command('let w:PHStatusLine="%s (%s)"' % (tag.full_name,
-                                                      tag.tag_type))
-        vim.command('let w:PHStatusLineTag="%s"' % tag.tag_type)
-        vim.command('let w:PHStatusLineType="%s"' % tag.full_name)
