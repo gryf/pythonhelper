@@ -1,28 +1,33 @@
 " File: pythonhelper.vim
 " Author: Michal Vitecek <fuf-at-mageo-dot-cz>
 " Author: Roman Dobosz <gryf@vimja.com>
-" Version: 1.0
+" Version: 1.1
 " License: 3-clause BSD license
-" Last Modified: 2016-05-24
+" Last Modified: 2016-12-10
 
 " VIM functions {{{
-let g:pythonhelper_python = 'python'
 let s:plugin_path = expand('<sfile>:p:h', 1)
 
-function! s:PHLoader()
 
-    if !exists('g:pythonhelper_py_loaded')
+function! s:SetPython(msg)
+    if !exists('g:_python')
         if has('python')
-            exe 'pyfile ' . s:plugin_path . '/pythonhelper.py'
+            let g:_python = {'exec': 'python', 'file': 'pyfile'}
         elseif has('python3')
-            let g:pythonhelper_python = 'python3'
-            exe 'py3file ' . s:plugin_path . '/pythonhelper.py'
+            let g:_python = {'exec': 'python3', 'file': 'py3file'}
         else
-            echohl WarningMsg|echomsg
-                        \ "PythonHelper unavailable: "
-                        \ "requires Vim with Python support"|echohl None
+            echohl WarningMsg|echomsg a:msg|echohl None
             finish
         endif
+    endif
+endfunction
+
+
+function! s:PHLoader()
+    if !exists('g:pythonhelper_py_loaded')
+        call s:SetPython("PythonHelper unavailable: "
+                    \ "requires Vim with Python support")
+        execute g:_python['file'] . ' ' . s:plugin_path . '/pythonhelper.py'
         let g:pythonhelper_py_loaded = 1
     else
         echohl "already loaded"
@@ -42,7 +47,7 @@ function! PHCursorHold()
 
     " call Python function findTag() with the current buffer number and change
     " status indicator
-    execute g:pythonhelper_python . ' PythonHelper.find_tag(' . expand("<abuf>") .
+    execute g:_python['exec'] . ' PythonHelper.find_tag(' . expand("<abuf>") .
                 \ ', ' . b:changedtick . ')'
 endfunction
 
@@ -55,7 +60,7 @@ function! PHBufferDelete()
 
     " call Python function deleteTags() with the current buffer number and
     " change status indicator
-    execute g:pythonhelper_python . ' PythonHelper.delete_tags(' . expand("<abuf>") . ')'
+    execute g:_python['exec'] . ' PythonHelper.delete_tags(' . expand("<abuf>") . ')'
 endfunction
 
 
