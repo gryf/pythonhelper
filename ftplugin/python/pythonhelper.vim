@@ -26,7 +26,7 @@ endfunction
 function! s:PHLoader()
     if !exists('g:pythonhelper_py_loaded')
         call s:SetPython("PythonHelper unavailable: "
-                    \ "requires Vim with Python support")
+                    \ . "requires Vim with Python support")
         execute g:_python['file'] . ' ' . s:plugin_path . '/pythonhelper.py'
         let g:pythonhelper_py_loaded = 1
     else
